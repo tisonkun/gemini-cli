@@ -29,11 +29,15 @@ import { MEMORY_DEFINITION } from './definitions/coreTools.js';
 import { resolveToolDeclaration } from './definitions/resolver.js';
 
 export const DEFAULT_CONTEXT_FILENAME = 'GEMINI.md';
+export const MACHINE_LEARNINGS_FILENAME = 'machine-learnings.md';
 export const MEMORY_SECTION_HEADER = '## Gemini Added Memories';
 
 // This variable will hold the currently configured filename for GEMINI.md context files.
 // It defaults to DEFAULT_CONTEXT_FILENAME but can be overridden by setGeminiMdFilename.
-let currentGeminiMdFilename: string | string[] = DEFAULT_CONTEXT_FILENAME;
+let currentGeminiMdFilename: string | string[] = [
+  DEFAULT_CONTEXT_FILENAME,
+  MACHINE_LEARNINGS_FILENAME,
+];
 
 export function setGeminiMdFilename(newFilename: string | string[]): void {
   if (Array.isArray(newFilename)) {

@@ -31,6 +31,10 @@ import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { WebFetchTool } from '../tools/web-fetch.js';
 import { MemoryTool, setGeminiMdFilename } from '../tools/memoryTool.js';
+import { RecordLearningTool } from '../tools/recordLearningTool.js';
+import { RecordDecisionTool } from '../tools/recordDecisionTool.js';
+import { UpdateEpicStateTool } from '../tools/updateEpicStateTool.js';
+import { QueryKnowledgeTool } from '../tools/queryKnowledgeTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
 import { AskUserTool } from '../tools/ask-user.js';
 import { ExitPlanModeTool } from '../tools/exit-plan-mode.js';
@@ -590,6 +594,8 @@ export interface ConfigParameters {
   truncateToolOutputThreshold?: number;
   eventEmitter?: EventEmitter;
   useWriteTodos?: boolean;
+  akl?: boolean;
+  activeEpicId?: string;
   workspacePoliciesDir?: string;
   policyEngineConfig?: PolicyEngineConfig;
   directWebFetch?: boolean;
@@ -609,7 +615,6 @@ export interface ConfigParameters {
   disableAlwaysAllow?: boolean;
   rawOutput?: boolean;
   acceptRawOutputRisk?: boolean;
-  dynamicModelConfiguration?: boolean;
   modelConfigServiceConfig?: ModelConfigServiceConfig;
   enableHooks?: boolean;
   enableHooksUI?: boolean;
@@ -623,7 +628,6 @@ export interface ConfigParameters {
   disabledSkills?: string[];
   adminSkillsEnabled?: boolean;
   experimentalJitContext?: boolean;
-  topicUpdateNarration?: boolean;
   toolOutputMasking?: Partial<ToolOutputMaskingConfig>;
   disableLLMCorrection?: boolean;
   plan?: boolean;
@@ -790,6 +794,8 @@ export class Config implements McpContext, AgentLoopContext {
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
   private readonly useWriteTodos: boolean;
+  private readonly akl: boolean;
+  private activeEpicId: string | undefined;
   private readonly workspacePoliciesDir: string | undefined;
   private readonly _messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
@@ -811,7 +817,6 @@ export class Config implements McpContext, AgentLoopContext {
   private readonly disableAlwaysAllow: boolean;
   private readonly rawOutput: boolean;
   private readonly acceptRawOutputRisk: boolean;
-  private readonly dynamicModelConfiguration: boolean;
   private pendingIncludeDirectories: string[];
   private readonly enableHooks: boolean;
   private readonly enableHooksUI: boolean;
@@ -845,7 +850,6 @@ export class Config implements McpContext, AgentLoopContext {
   private readonly adminSkillsEnabled: boolean;
 
   private readonly experimentalJitContext: boolean;
-  private readonly topicUpdateNarration: boolean;
   private readonly disableLLMCorrection: boolean;
   private readonly planEnabled: boolean;
   private readonly trackerEnabled: boolean;
@@ -959,42 +963,7 @@ export class Config implements McpContext, AgentLoopContext {
     this.disabledSkills = params.disabledSkills ?? [];
     this.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
     this.modelAvailabilityService = new ModelAvailabilityService();
-    this.dynamicModelConfiguration = params.dynamicModelConfiguration ?? false;
-
-    // HACK: The settings loading logic doesn't currently merge the default
-    // generation config with the user's settings. This means if a user provides
-    // any `generation` settings (e.g., just `overrides`), the default `aliases`
-    // are lost. This hack manually merges the default aliases back in if they
-    // are missing from the user's config.
-    // TODO(12593): Fix the settings loading logic to properly merge defaults and
-    // remove this hack.
-    let modelConfigServiceConfig = params.modelConfigServiceConfig;
-    if (modelConfigServiceConfig) {
-      // Ensure user-defined model definitions augment, not replace, the defaults.
-      const mergedModelDefinitions = {
-        ...DEFAULT_MODEL_CONFIGS.modelDefinitions,
-        ...modelConfigServiceConfig.modelDefinitions,
-      };
-
-      modelConfigServiceConfig = {
-        // Preserve other user settings like customAliases
-        ...modelConfigServiceConfig,
-        // Apply defaults for aliases and overrides if they are not provided
-        aliases:
-          modelConfigServiceConfig.aliases ?? DEFAULT_MODEL_CONFIGS.aliases,
-        overrides:
-          modelConfigServiceConfig.overrides ?? DEFAULT_MODEL_CONFIGS.overrides,
-        // Use the merged model definitions
-        modelDefinitions: mergedModelDefinitions,
-      };
-    }
-
-    this.modelConfigService = new ModelConfigService(
-      modelConfigServiceConfig ?? DEFAULT_MODEL_CONFIGS,
-    );
-
     this.experimentalJitContext = params.experimentalJitContext ?? false;
-    this.topicUpdateNarration = params.topicUpdateNarration ?? false;
     this.modelSteering = params.modelSteering ?? false;
     this.userHintService = new UserHintService(() =>
       this.isModelSteeringEnabled(),
@@ -1049,9 +1018,11 @@ export class Config implements McpContext, AgentLoopContext {
     this.truncateToolOutputThreshold =
       params.truncateToolOutputThreshold ??
       DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD;
-    this.useWriteTodos = isPreviewModel(this.model, this)
+    this.useWriteTodos = isPreviewModel(this.model)
       ? false
       : (params.useWriteTodos ?? true);
+    this.akl = params.akl ?? false;
+    this.activeEpicId = params.activeEpicId;
     this.workspacePoliciesDir = params.workspacePoliciesDir;
     this.enableHooksUI = params.enableHooksUI ?? true;
     this.enableHooks = params.enableHooks ?? true;
@@ -1167,6 +1138,33 @@ export class Config implements McpContext, AgentLoopContext {
     this._sandboxManager = createSandboxManager(params.toolSandboxing ?? false);
     this.shellExecutionConfig.sandboxManager = this._sandboxManager;
     this.modelRouterService = new ModelRouterService(this);
+
+    // HACK: The settings loading logic doesn't currently merge the default
+    // generation config with the user's settings. This means if a user provides
+    // any `generation` settings (e.g., just `overrides`), the default `aliases`
+    // are lost. This hack manually merges the default aliases back in if they
+    // are missing from the user's config.
+    // TODO(12593): Fix the settings loading logic to properly merge defaults and
+    // remove this hack.
+    let modelConfigServiceConfig = params.modelConfigServiceConfig;
+    if (modelConfigServiceConfig) {
+      if (!modelConfigServiceConfig.aliases) {
+        modelConfigServiceConfig = {
+          ...modelConfigServiceConfig,
+          aliases: DEFAULT_MODEL_CONFIGS.aliases,
+        };
+      }
+      if (!modelConfigServiceConfig.overrides) {
+        modelConfigServiceConfig = {
+          ...modelConfigServiceConfig,
+          overrides: DEFAULT_MODEL_CONFIGS.overrides,
+        };
+      }
+    }
+
+    this.modelConfigService = new ModelConfigService(
+      modelConfigServiceConfig ?? DEFAULT_MODEL_CONFIGS,
+    );
   }
 
   get config(): Config {
@@ -1364,10 +1362,7 @@ export class Config implements McpContext, AgentLoopContext {
 
     // Only reset when we have explicit "no access" (hasAccessToPreviewModel === false).
     // When null (quota not fetched) or true, we preserve the saved model.
-    if (
-      isPreviewModel(this.model, this) &&
-      this.hasAccessToPreviewModel === false
-    ) {
+    if (isPreviewModel(this.model) && this.hasAccessToPreviewModel === false) {
       this.setModel(DEFAULT_GEMINI_MODEL_AUTO);
     }
 
@@ -1639,7 +1634,7 @@ export class Config implements McpContext, AgentLoopContext {
 
     const isPreview =
       model === PREVIEW_GEMINI_MODEL_AUTO ||
-      isPreviewModel(this.getActiveModel(), this);
+      isPreviewModel(this.getActiveModel());
     const proModel = isPreview ? PREVIEW_GEMINI_MODEL : DEFAULT_GEMINI_MODEL;
     const flashModel = isPreview
       ? PREVIEW_GEMINI_FLASH_MODEL
@@ -1837,9 +1832,8 @@ export class Config implements McpContext, AgentLoopContext {
       }
 
       const hasAccess =
-        quota.buckets?.some(
-          (b) => b.modelId && isPreviewModel(b.modelId, this),
-        ) ?? false;
+        quota.buckets?.some((b) => b.modelId && isPreviewModel(b.modelId)) ??
+        false;
       this.setHasAccessToPreviewModel(hasAccess);
       return quota;
     } catch (e) {
@@ -2061,10 +2055,6 @@ export class Config implements McpContext, AgentLoopContext {
     return this.experimentalJitContext;
   }
 
-  isTopicUpdateNarrationEnabled(): boolean {
-    return this.topicUpdateNarration;
-  }
-
   isModelSteeringEnabled(): boolean {
     return this.modelSteering;
   }
@@ -2237,10 +2227,6 @@ export class Config implements McpContext, AgentLoopContext {
 
   getAcceptRawOutputRisk(): boolean {
     return this.acceptRawOutputRisk;
-  }
-
-  getExperimentalDynamicModelConfiguration(): boolean {
-    return this.dynamicModelConfiguration;
   }
 
   getPendingIncludeDirectories(): string[] {
@@ -2892,6 +2878,18 @@ export class Config implements McpContext, AgentLoopContext {
     return this.useWriteTodos;
   }
 
+  getAklEnabled(): boolean {
+    return this.akl;
+  }
+
+  getActiveEpicId(): string | undefined {
+    return this.activeEpicId;
+  }
+
+  setActiveEpicId(epicId: string): void {
+    this.activeEpicId = epicId;
+  }
+
   getOutputFormat(): OutputFormat {
     return this.outputSettings?.format
       ? this.outputSettings.format
@@ -3063,6 +3061,18 @@ export class Config implements McpContext, AgentLoopContext {
     maybeRegister(MemoryTool, () =>
       registry.registerTool(new MemoryTool(this.messageBus)),
     );
+    maybeRegister(RecordLearningTool, () =>
+      registry.registerTool(new RecordLearningTool(this.messageBus)),
+    );
+    maybeRegister(RecordDecisionTool, () =>
+      registry.registerTool(new RecordDecisionTool(this, this.messageBus)),
+    );
+    maybeRegister(UpdateEpicStateTool, () =>
+      registry.registerTool(new UpdateEpicStateTool(this, this.messageBus)),
+    );
+    maybeRegister(QueryKnowledgeTool, () =>
+      registry.registerTool(new QueryKnowledgeTool(this, this.messageBus)),
+    );
     maybeRegister(WebSearchTool, () =>
       registry.registerTool(new WebSearchTool(this, this.messageBus)),
     );
@@ -3071,7 +3081,7 @@ export class Config implements McpContext, AgentLoopContext {
     );
     if (this.getUseWriteTodos()) {
       maybeRegister(WriteTodosTool, () =>
-        registry.registerTool(new WriteTodosTool(this.messageBus)),
+        registry.registerTool(new WriteTodosTool(this, this.messageBus)),
       );
     }
     if (this.isPlanEnabled()) {

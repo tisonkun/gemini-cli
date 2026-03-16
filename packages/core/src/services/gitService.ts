@@ -128,6 +128,23 @@ export class GitService {
     return hash.trim();
   }
 
+  async getCurrentBranch(): Promise<string> {
+    try {
+      const branch = await simpleGit(this.projectRoot).revparse([
+        '--abbrev-ref',
+        'HEAD',
+      ]);
+      return branch.trim();
+    } catch (error) {
+      debugLogger.debug(`Failed to get current branch: ${String(error)}`);
+      return '';
+    }
+  }
+
+  getRepoRoot(): string {
+    return this.projectRoot;
+  }
+
   async createFileSnapshot(message: string): Promise<string> {
     try {
       const repo = this.shadowGitRepository;

@@ -1216,6 +1216,9 @@ included directory memory
   it('should include MCP instructions in user memory', async () => {
     const mockConfig = {
       getWorkingDir: vi.fn().mockReturnValue(cwd),
+      getProjectRoot: vi.fn().mockReturnValue(projectRoot),
+      getAklEnabled: vi.fn().mockReturnValue(false),
+      getActiveEpicId: vi.fn().mockReturnValue(undefined),
       shouldLoadMemoryFromIncludeDirectories: vi.fn().mockReturnValue(false),
       getFileService: vi
         .fn()

@@ -124,7 +124,6 @@ export class PromptProvider {
           hasSkills: skills.length > 0,
           hasHierarchicalMemory,
           contextFilenames,
-          topicUpdateNarration: context.config.isTopicUpdateNarrationEnabled(),
         })),
         subAgents: this.withSection('agentContexts', () =>
           context.config
@@ -163,8 +162,6 @@ export class PromptProvider {
               ? { path: approvedPlanPath }
               : undefined,
             taskTracker: context.config.isTrackerEnabled(),
-            topicUpdateNarration:
-              context.config.isTopicUpdateNarrationEnabled(),
           }),
           !isPlanMode,
         ),
@@ -186,8 +183,6 @@ export class PromptProvider {
             enableShellEfficiency:
               context.config.getEnableShellOutputEfficiency(),
             interactiveShellEnabled: context.config.isInteractiveShellEnabled(),
-            topicUpdateNarration:
-              context.config.isTopicUpdateNarrationEnabled(),
           }),
         ),
         sandbox: this.withSection('sandbox', () => getSandboxMode()),

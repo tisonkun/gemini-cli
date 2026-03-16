@@ -72,6 +72,7 @@ vi.mock('node:fs', () => {
       });
     }),
     existsSync: vi.fn((path: string) => mockFileSystem.has(path)),
+    realpath: vi.fn(async (path: string) => path),
     createWriteStream: vi.fn(() => ({
       write: vi.fn(),
       on: vi.fn(),
@@ -83,6 +84,15 @@ vi.mock('node:fs', () => {
     ...fsModule,
   };
 });
+
+vi.mock('node:fs/promises', () => ({
+    realpath: vi.fn(async (p: string) => p),
+    access: vi.fn(async () => {}),
+    mkdir: vi.fn(async () => {}),
+    writeFile: vi.fn(async () => {}),
+    readFile: vi.fn(async () => ''),
+    readdir: vi.fn(async () => []),
+  }));
 
 // --- Mocks ---
 interface MockTurnContext {
@@ -220,6 +230,21 @@ describe('Gemini Client (client.ts)', () => {
       getContextManager: vi.fn().mockReturnValue(undefined),
       getToolOutputMaskingEnabled: vi.fn().mockReturnValue(false),
       getDisableLoopDetection: vi.fn().mockReturnValue(false),
+      getAklEnabled: vi.fn().mockReturnValue(false),
+      getActiveEpicId: vi.fn().mockReturnValue(undefined),
+      setActiveEpicId: vi.fn(),
+      shouldLoadMemoryFromIncludeDirectories: vi.fn().mockReturnValue(false),
+      getExtensionLoader: vi.fn().mockReturnValue({
+        getExtensions: vi.fn().mockReturnValue([]),
+      }),
+      isTrustedFolder: vi.fn().mockReturnValue(true),
+      getImportFormat: vi.fn().mockReturnValue('tree'),
+      getFileFilteringOptions: vi.fn().mockReturnValue(undefined),
+      getDiscoveryMaxDirs: vi.fn().mockReturnValue(200),
+      setUserMemory: vi.fn(),
+      setGeminiMdFileCount: vi.fn(),
+      setGeminiMdFilePaths: vi.fn(),
+      getMcpClientManager: vi.fn().mockReturnValue(undefined),
 
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProxy: vi.fn().mockReturnValue(undefined),
@@ -391,6 +416,20 @@ describe('Gemini Client (client.ts)', () => {
       vi.mocked(mockConfig.getContextManager).mockReturnValue(undefined);
 
       await expect(client.resetChat()).resolves.not.toThrow();
+    });
+
+    it('should run AKL discovery when enabled', async () => {
+      vi.mocked(mockConfig.getAklEnabled).mockReturnValue(true);
+      const spy = vi
+        .spyOn(
+          client as unknown as { runAklDiscovery: () => Promise<void> },
+          'runAklDiscovery',
+        )
+        .mockResolvedValue(undefined);
+
+      await client.initialize();
+
+      expect(spy).toHaveBeenCalled();
     });
   });
 

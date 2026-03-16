@@ -104,6 +104,9 @@ describe('ExtensionManager theme loading', () => {
       }),
       getHookSystem: () => undefined,
       getWorkingDir: () => tempHomeDir,
+      getProjectRoot: () => tempHomeDir,
+      getAklEnabled: () => false,
+      getActiveEpicId: () => undefined,
       shouldLoadMemoryFromIncludeDirectories: () => false,
       getDebugMode: () => false,
       getFileExclusions: () => ({
@@ -181,6 +184,9 @@ describe('ExtensionManager theme loading', () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     const mockConfig = {
       getWorkingDir: () => tempHomeDir,
+      getProjectRoot: () => tempHomeDir,
+      getAklEnabled: () => false,
+      getActiveEpicId: () => undefined,
       shouldLoadMemoryFromIncludeDirectories: () => false,
       getWorkspaceContext: () => ({
         getDirectories: () => [],

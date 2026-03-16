@@ -95,7 +95,6 @@ describe('Core System Prompt (prompts.ts)', () => {
       },
       isInteractive: vi.fn().mockReturnValue(true),
       isInteractiveShellEnabled: vi.fn().mockReturnValue(true),
-      isTopicUpdateNarrationEnabled: vi.fn().mockReturnValue(false),
       isAgentsEnabled: vi.fn().mockReturnValue(false),
       getPreviewFeatures: vi.fn().mockReturnValue(true),
       getModel: vi.fn().mockReturnValue(DEFAULT_GEMINI_MODEL_AUTO),
@@ -293,7 +292,9 @@ describe('Core System Prompt (prompts.ts)', () => {
     const memory = 'This is custom user memory.\nBe extra polite.';
     const prompt = getCoreSystemPrompt(mockConfig, memory);
 
-    expect(prompt).toContain('# Contextual Instructions (GEMINI.md)');
+    expect(prompt).toContain(
+      '# Contextual Instructions (GEMINI.md, machine-learnings.md)',
+    );
     expect(prompt).toContain('<loaded_context>');
     expect(prompt).toContain(memory);
     expect(prompt).toContain('You are Gemini CLI, an interactive CLI agent'); // Ensure base prompt follows
@@ -409,7 +410,6 @@ describe('Core System Prompt (prompts.ts)', () => {
         },
         isInteractive: vi.fn().mockReturnValue(false),
         isInteractiveShellEnabled: vi.fn().mockReturnValue(false),
-        isTopicUpdateNarrationEnabled: vi.fn().mockReturnValue(false),
         isAgentsEnabled: vi.fn().mockReturnValue(false),
         getModel: vi.fn().mockReturnValue('auto'),
         getActiveModel: vi.fn().mockReturnValue(PREVIEW_GEMINI_MODEL),

@@ -1106,6 +1106,28 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
+  describe('AKL Configuration', () => {
+    it('should default akl to false when not provided', () => {
+      const config = new Config(baseParams);
+      expect(config.getAklEnabled()).toBe(false);
+    });
+
+    it('should set akl to true when provided as true', () => {
+      const params: ConfigParameters = {
+        ...baseParams,
+        akl: true,
+      };
+      const config = new Config(params);
+      expect(config.getAklEnabled()).toBe(true);
+    });
+
+    it('should store and retrieve activeEpicId', () => {
+      const config = new Config(baseParams);
+      config.setActiveEpicId('test-epic');
+      expect(config.getActiveEpicId()).toBe('test-epic');
+    });
+  });
+
   describe('Event Driven Scheduler Configuration', () => {
     it('should default enableEventDrivenScheduler to true when not provided', () => {
       const config = new Config(baseParams);

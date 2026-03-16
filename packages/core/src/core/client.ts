@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import {
   createUserContent,
   type GenerateContentConfig,
@@ -75,6 +77,8 @@ import {
   resolveModel,
   isGemini2Model,
 } from '../config/models.js';
+import { AklDiscoveryService } from '../services/aklDiscoveryService.js';
+import { KnowledgeIndexingService } from '../services/knowledgeIndexingService.js';
 import { partToString } from '../utils/partUtils.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
@@ -99,6 +103,7 @@ export class GeminiClient {
   private readonly loopDetector: LoopDetectionService;
   private readonly compressionService: ChatCompressionService;
   private readonly toolOutputMaskingService: ToolOutputMaskingService;
+  private readonly aklDiscoveryService: AklDiscoveryService;
   private lastPromptId: string;
   private currentSequenceModel: string | null = null;
   private lastSentIdeContext: IdeContext | undefined;
@@ -114,6 +119,7 @@ export class GeminiClient {
     this.loopDetector = new LoopDetectionService(this.config);
     this.compressionService = new ChatCompressionService();
     this.toolOutputMaskingService = new ToolOutputMaskingService();
+    this.aklDiscoveryService = new AklDiscoveryService(this.config);
     this.lastPromptId = this.config.getSessionId();
 
     coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
@@ -238,8 +244,57 @@ export class GeminiClient {
   }
 
   async initialize() {
+    if (this.config.getAklEnabled()) {
+      await this.runAklDiscovery();
+      // Update the knowledge index in the background
+      const indexer = new KnowledgeIndexingService(this.config);
+      indexer
+        .updateIndex()
+        .catch((err) =>
+          debugLogger.debug(
+            `AKL: Failed to update knowledge index: ${String(err)}`,
+          ),
+        );
+
+      // Refresh memory to pick up newly discovered/created Epic files
+      const { refreshServerHierarchicalMemory } = await import(
+        '../utils/memoryDiscovery.js'
+      );
+      await refreshServerHierarchicalMemory(this.config);
+    }
     this.chat = await this.startChat();
     this.updateTelemetryTokenCount();
+  }
+
+  private async runAklDiscovery() {
+    const epic = await this.aklDiscoveryService.discoverActiveEpic();
+    if (epic) {
+      this.config.setActiveEpicId(epic.epicId);
+      debugLogger.debug(`AKL: Active Epic detected: ${epic.epicId}`);
+
+      if (epic.issueId) {
+        const githubContext = await this.aklDiscoveryService.syncGitHubContext(
+          epic.issueId,
+        );
+        if (githubContext) {
+          // In Phase 0, we just log it. In Phase 1, we save it to context.md
+          debugLogger.debug(`AKL: Synced GitHub context for #${epic.issueId}`);
+
+          // Pre-populate context.md if it doesn't exist
+          const contextPath = path.join(epic.path, 'context.md');
+          try {
+            await fs.access(contextPath);
+          } catch {
+            await fs.mkdir(epic.path, { recursive: true });
+            await fs.writeFile(
+              contextPath,
+              `# Epic Context: ${epic.epicId}\n\n${githubContext}`,
+              'utf-8',
+            );
+          }
+        }
+      }
+    }
   }
 
   private getContentGeneratorOrFail(): ContentGenerator {

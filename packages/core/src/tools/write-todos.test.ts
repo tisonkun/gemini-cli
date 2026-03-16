@@ -4,12 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { WriteTodosTool, type WriteTodosToolParams } from './write-todos.js';
 import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
+import type { Config } from '../config/config.js';
 
 describe('WriteTodosTool', () => {
-  const tool = new WriteTodosTool(createMockMessageBus());
+  const mockConfig = {
+    getAklEnabled: vi.fn().mockReturnValue(false),
+    getActiveEpicId: vi.fn().mockReturnValue(undefined),
+    getCoreTools: vi.fn().mockReturnValue(undefined),
+  } as unknown as Config;
+
+  const tool = new WriteTodosTool(mockConfig, createMockMessageBus());
   const signal = new AbortController().signal;
 
   describe('validation', () => {
