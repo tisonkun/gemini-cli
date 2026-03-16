@@ -6,6 +6,7 @@
 
 import { describe, it, afterEach, beforeEach, vi } from 'vitest';
 import { AppRig } from '../test-utils/AppRig.js';
+import { act } from 'react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PolicyDecision } from '@google/gemini-cli-core';
@@ -33,7 +34,10 @@ describe('Model Steering Integration', () => {
       configOverrides: { modelSteering: true },
     });
     await rig.initialize();
-    rig.render();
+    await act(async () => {
+      rig!.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     await rig.waitForIdle();
 
     rig.setToolPolicy('list_directory', PolicyDecision.ASK_USER);

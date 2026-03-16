@@ -18,6 +18,7 @@ import { ThemedGradient } from './ThemedGradient.js';
 import { CliSpinner } from './CliSpinner.js';
 
 import { isAppleTerminal } from '@google/gemini-cli-core';
+
 import { compactLogoIcon, longAsciiLogoCompactText } from './AsciiArt.js';
 import { getAsciiArtWidth } from '../utils/textUtils.js';
 
@@ -31,6 +32,13 @@ const DEFAULT_ICON = `▝▜▄
  ▗▟▀ 
 ▝▀    `;
 
+/**
+ * The default Apple Terminal.app adds significant line-height padding between
+ * rows. This breaks Unicode block-drawing characters that rely on vertical
+ * adjacency (like half-blocks). This version is perfectly symmetric vertically,
+ * which makes the padding gaps look like an intentional "scanline" design
+ * rather than a broken image.
+ */
 const MAC_TERMINAL_ICON = `▝▜▄  
   ▝▜▄
   ▗▟▀
@@ -44,16 +52,14 @@ export const AppHeader = ({ version, showDetails = true }: AppHeaderProps) => {
   const { bannerText } = useBanner(bannerData);
   const { showTips } = useTips();
 
-  const authType = config.getContentGeneratorConfig()?.authType;
-  const loggedOut = !authType;
-
   const showHeader = !(
     settings.merged.ui.hideBanner || config.getScreenReader()
   );
 
   const ICON = isAppleTerminal() ? MAC_TERMINAL_ICON : DEFAULT_ICON;
+  const authType = config.getContentGeneratorConfig()?.authType;
+  const loggedOut = !authType;
 
-  // Determine if we should show the full landing banner
   let showFullLogo = false;
   if (loggedOut && terminalWidth > 0) {
     try {
@@ -66,76 +72,125 @@ export const AppHeader = ({ version, showDetails = true }: AppHeaderProps) => {
     }
   }
 
-  const identitySection = showDetails && (
-    <>
-      <Box height={1} />
-      {settings.merged.ui.showUserIdentity !== false && (
-        <UserIdentity config={config} />
-      )}
-    </>
-  );
-
-  const versionLine = (
-    <Box>
-      <Text bold color={theme.text.primary}>
-        Gemini CLI
-      </Text>
-      <Text color={theme.text.secondary}> v{version}</Text>
-      {showDetails && updateInfo && (
-        <Box marginLeft={2}>
-          <Text color={theme.text.secondary}>
-            <CliSpinner /> Updating
-          </Text>
-        </Box>
-      )}
-    </Box>
-  );
-
-  const renderHeader = () => {
-    if (!showHeader) return null;
-
-    if (showFullLogo) {
-      return (
-        <Box
-          flexDirection="column"
-          marginTop={1}
-          marginBottom={1}
-          paddingLeft={2}
-        >
-          <Box flexDirection="row" flexShrink={0} marginBottom={1}>
-            <ThemedGradient>{compactLogoIcon.trim()}</ThemedGradient>
-            <Box marginLeft={2}>
-              <Text color={theme.text.primary}>
-                {longAsciiLogoCompactText.trim()}
-              </Text>
+  if (showFullLogo) {
+    return (
+      <Box flexDirection="column">
+        {showHeader && (
+          <Box
+            flexDirection="column"
+            marginTop={1}
+            marginBottom={1}
+            paddingLeft={2}
+          >
+            <Box flexDirection="row" flexShrink={0} marginBottom={1}>
+              <ThemedGradient>{compactLogoIcon}</ThemedGradient>
+              <Box marginLeft={2}>
+                <Text color={theme.text.primary}>
+                  {longAsciiLogoCompactText}
+                </Text>
+              </Box>
+            </Box>
+            <Box flexDirection="column">
+              <Box>
+                <Text bold color={theme.text.primary}>
+                  Gemini CLI
+                </Text>
+                <Text color={theme.text.secondary}> v{version}</Text>
+                {showDetails && updateInfo && (
+                  <Box marginLeft={2}>
+                    <Text color={theme.text.secondary}>
+                      <CliSpinner /> Updating
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+              {showDetails && (
+                <>
+                  <Box height={1} />
+                  {settings.merged.ui.showUserIdentity !== false && (
+                    <UserIdentity config={config} />
+                  )}
+                </>
+              )}
             </Box>
           </Box>
-          <Box flexDirection="column">
-            {versionLine}
-            {identitySection}
-          </Box>
-        </Box>
-      );
-    }
-
-    return (
-      <Box flexDirection="row" marginTop={1} marginBottom={1} paddingLeft={2}>
-        <Box flexShrink={0}>
-          <ThemedGradient>{ICON}</ThemedGradient>
-        </Box>
-        <Box marginLeft={2} flexDirection="column">
-          {versionLine}
-          {identitySection}
-        </Box>
+        )}
+        {showDetails && bannerVisible && bannerText && (
+          <Banner
+            width={terminalWidth}
+            bannerText={bannerText}
+            isWarning={bannerData.warningText !== ''}
+          />
+        )}
+        {showDetails &&
+          !(settings.merged.ui.hideTips || config.getScreenReader()) &&
+          showTips && <Tips config={config} />}
       </Box>
     );
-  };
+  }
+
+  if (!showDetails) {
+    return (
+      <Box flexDirection="column">
+        {showHeader && (
+          <Box
+            flexDirection="row"
+            marginTop={1}
+            marginBottom={1}
+            paddingLeft={2}
+          >
+            <Box flexShrink={0}>
+              <ThemedGradient>{ICON}</ThemedGradient>
+            </Box>
+            <Box marginLeft={2} flexDirection="column">
+              <Box>
+                <Text bold color={theme.text.primary}>
+                  Gemini CLI
+                </Text>
+                <Text color={theme.text.secondary}> v{version}</Text>
+              </Box>
+            </Box>
+          </Box>
+        )}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">
-      {renderHeader()}
+      {showHeader && (
+        <Box flexDirection="row" marginTop={1} marginBottom={1} paddingLeft={2}>
+          <Box flexShrink={0}>
+            <ThemedGradient>{ICON}</ThemedGradient>
+          </Box>
+          <Box marginLeft={2} flexDirection="column">
+            {/* Line 1: Gemini CLI vVersion [Updating] */}
+            <Box>
+              <Text bold color={theme.text.primary}>
+                Gemini CLI
+              </Text>
+              <Text color={theme.text.secondary}> v{version}</Text>
+              {updateInfo && (
+                <Box marginLeft={2}>
+                  <Text color={theme.text.secondary}>
+                    <CliSpinner /> Updating
+                  </Text>
+                </Box>
+              )}
+            </Box>
 
-      {showDetails && bannerVisible && bannerText && (
+            {/* Line 2: Blank */}
+            <Box height={1} />
+
+            {/* Lines 3 & 4: User Identity info (Email /auth and Plan /upgrade) */}
+            {settings.merged.ui.showUserIdentity !== false && (
+              <UserIdentity config={config} />
+            )}
+          </Box>
+        </Box>
+      )}
+
+      {bannerVisible && bannerText && (
         <Banner
           width={terminalWidth}
           bannerText={bannerText}
@@ -143,8 +198,7 @@ export const AppHeader = ({ version, showDetails = true }: AppHeaderProps) => {
         />
       )}
 
-      {showDetails &&
-        !(settings.merged.ui.hideTips || config.getScreenReader()) &&
+      {!(settings.merged.ui.hideTips || config.getScreenReader()) &&
         showTips && <Tips config={config} />}
     </Box>
   );

@@ -406,7 +406,7 @@ export class AppRig {
           width: this.options.terminalWidth ?? 120,
           useAlternateBuffer: false,
           uiState: {
-            terminalHeight: this.options.terminalHeight ?? 40,
+            terminalHeight: this.options.terminalHeight ?? 80,
           },
         },
       );
