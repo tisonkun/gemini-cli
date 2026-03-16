@@ -25,7 +25,11 @@ import {
   splitCommands,
   hasRedirection,
 } from '../utils/shell-utils.js';
-import { getToolAliases } from '../tools/tool-names.js';
+import {
+  ENTER_PLAN_MODE_TOOL_NAME,
+  EXIT_PLAN_MODE_TOOL_NAME,
+  getToolAliases,
+} from '../tools/tool-names.js';
 import {
   MCP_TOOL_PREFIX,
   isMcpToolAnnotation,
@@ -225,7 +229,7 @@ export class PolicyEngine {
   ): Promise<CheckResult> {
     if (!command) {
       return {
-        decision: this.applyNonInteractiveMode(ruleDecision),
+        decision: this.applyNonInteractiveMode(ruleDecision, toolName),
         rule,
       };
     }
@@ -254,7 +258,10 @@ export class PolicyEngine {
       // Parsing logic failed, we can't trust it. Force ASK_USER (or DENY).
       // We return the rule that matched so the evaluation loop terminates.
       return {
-        decision: this.applyNonInteractiveMode(PolicyDecision.ASK_USER),
+        decision: this.applyNonInteractiveMode(
+          PolicyDecision.ASK_USER,
+          toolName,
+        ),
         rule,
       };
     }
@@ -351,7 +358,7 @@ export class PolicyEngine {
       }
 
       return {
-        decision: this.applyNonInteractiveMode(aggregateDecision),
+        decision: this.applyNonInteractiveMode(aggregateDecision, toolName),
         // If we stayed at ALLOW, we return the original rule (if any).
         // If we downgraded, we return the responsible rule (or undefined if implicit).
         rule: aggregateDecision === ruleDecision ? rule : responsibleRule,
@@ -359,7 +366,7 @@ export class PolicyEngine {
     }
 
     return {
-      decision: this.applyNonInteractiveMode(ruleDecision),
+      decision: this.applyNonInteractiveMode(ruleDecision, toolName),
       rule,
     };
   }
@@ -471,7 +478,7 @@ export class PolicyEngine {
             break;
           }
         } else {
-          decision = this.applyNonInteractiveMode(rule.decision);
+          decision = this.applyNonInteractiveMode(rule.decision, toolCall.name);
           matchedRule = rule;
           break;
         }
@@ -507,7 +514,10 @@ export class PolicyEngine {
         decision = shellResult.decision;
         matchedRule = shellResult.rule;
       } else {
-        decision = this.applyNonInteractiveMode(this.defaultDecision);
+        decision = this.applyNonInteractiveMode(
+          this.defaultDecision,
+          toolCall.name,
+        );
       }
     }
 
@@ -562,7 +572,7 @@ export class PolicyEngine {
     }
 
     return {
-      decision: this.applyNonInteractiveMode(decision),
+      decision: this.applyNonInteractiveMode(decision, toolCall.name),
       rule: matchedRule,
     };
   }
@@ -730,7 +740,10 @@ export class PolicyEngine {
             continue;
           } else {
             // Unconditional rule for this tool
-            const decision = this.applyNonInteractiveMode(rule.decision);
+            const decision = this.applyNonInteractiveMode(
+              rule.decision,
+              toolName,
+            );
             staticallyExcluded = decision === PolicyDecision.DENY;
             matchFound = true;
             break;
@@ -740,7 +753,10 @@ export class PolicyEngine {
 
       if (!matchFound) {
         // Fallback to default decision if no rule matches
-        const defaultDec = this.applyNonInteractiveMode(this.defaultDecision);
+        const defaultDec = this.applyNonInteractiveMode(
+          this.defaultDecision,
+          toolName,
+        );
         if (defaultDec === PolicyDecision.DENY) {
           staticallyExcluded = true;
         }
@@ -754,10 +770,22 @@ export class PolicyEngine {
     return excludedTools;
   }
 
-  private applyNonInteractiveMode(decision: PolicyDecision): PolicyDecision {
-    // In non-interactive mode, ASK_USER becomes DENY
-    if (this.nonInteractive && decision === PolicyDecision.ASK_USER) {
-      return PolicyDecision.DENY;
+  private applyNonInteractiveMode(
+    decision: PolicyDecision,
+    toolName?: string,
+  ): PolicyDecision {
+    if (this.nonInteractive) {
+      // In non-interactive mode, enter/exit plan mode tools are allowed.
+      if (
+        toolName === ENTER_PLAN_MODE_TOOL_NAME ||
+        toolName === EXIT_PLAN_MODE_TOOL_NAME
+      ) {
+        return PolicyDecision.ALLOW;
+      }
+      // In non-interactive mode, ASK_USER becomes DENY unless it's a specific tool like plan mode tools
+      if (decision === PolicyDecision.ASK_USER) {
+        return PolicyDecision.DENY;
+      }
     }
     return decision;
   }

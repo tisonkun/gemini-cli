@@ -21,6 +21,10 @@ import { SafetyCheckDecision } from '../safety/protocol.js';
 import type { CheckerRunner } from '../safety/checker-runner.js';
 import { initializeShellParsers } from '../utils/shell-utils.js';
 import { buildArgsPatterns } from './utils.js';
+import {
+  ENTER_PLAN_MODE_TOOL_NAME,
+  EXIT_PLAN_MODE_TOOL_NAME,
+} from '../tools/tool-names.js';
 
 // Mock shell-utils to ensure consistent behavior across platforms (especially Windows CI)
 // We want to test PolicyEngine logic, not the shell parser's ability to parse commands
@@ -61,7 +65,8 @@ vi.mock('../tools/tool-names.js', async (importOriginal) => {
 
   return {
     ...actual,
-
+    ENTER_PLAN_MODE_TOOL_NAME: 'enter_plan_mode',
+    EXIT_PLAN_MODE_TOOL_NAME: 'exit_plan_mode',
     TOOL_LEGACY_ALIASES: mockedAliases,
 
     getToolAliases: vi.fn().mockImplementation((name: string) => {
@@ -3340,6 +3345,76 @@ describe('PolicyEngine', () => {
         new Set(['test-tool']),
       );
       expect(excluded.has('test-tool')).toBe(false);
+    });
+  });
+
+  describe('applyNonInteractiveMode', () => {
+    it('should convert ASK_USER to DENY when nonInteractive is true', () => {
+      const engineNonInteractive = new PolicyEngine({ nonInteractive: true });
+      expect(
+        (
+          engineNonInteractive as unknown as {
+            applyNonInteractiveMode(
+              decision: PolicyDecision,
+              toolName?: string,
+            ): PolicyDecision;
+          }
+        ).applyNonInteractiveMode(PolicyDecision.ASK_USER, 'some_tool'),
+      ).toBe(PolicyDecision.DENY);
+    });
+
+    it('should allow ENTER_PLAN_MODE_TOOL even if decision is ASK_USER and nonInteractive is true', () => {
+      const engineNonInteractive = new PolicyEngine({ nonInteractive: true });
+      expect(
+        (
+          engineNonInteractive as unknown as {
+            applyNonInteractiveMode(
+              decision: PolicyDecision,
+              toolName?: string,
+            ): PolicyDecision;
+          }
+        ).applyNonInteractiveMode(
+          PolicyDecision.ASK_USER,
+          ENTER_PLAN_MODE_TOOL_NAME,
+        ),
+      ).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('should allow EXIT_PLAN_MODE_TOOL even if decision is ASK_USER and nonInteractive is true', () => {
+      const engineNonInteractive = new PolicyEngine({ nonInteractive: true });
+      expect(
+        (
+          engineNonInteractive as unknown as {
+            applyNonInteractiveMode(
+              decision: PolicyDecision,
+              toolName?: string,
+            ): PolicyDecision;
+          }
+        ).applyNonInteractiveMode(
+          PolicyDecision.ASK_USER,
+          EXIT_PLAN_MODE_TOOL_NAME,
+        ),
+      ).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('should not change decision when nonInteractive is false', () => {
+      const engineInteractive = new PolicyEngine({ nonInteractive: false });
+      const applyMap = engineInteractive as unknown as {
+        applyNonInteractiveMode(
+          decision: PolicyDecision,
+          toolName?: string,
+        ): PolicyDecision;
+      };
+
+      expect(
+        applyMap.applyNonInteractiveMode(PolicyDecision.ASK_USER, 'some_tool'),
+      ).toBe(PolicyDecision.ASK_USER);
+      expect(
+        applyMap.applyNonInteractiveMode(PolicyDecision.ALLOW, 'some_tool'),
+      ).toBe(PolicyDecision.ALLOW);
+      expect(
+        applyMap.applyNonInteractiveMode(PolicyDecision.DENY, 'some_tool'),
+      ).toBe(PolicyDecision.DENY);
     });
   });
 });
